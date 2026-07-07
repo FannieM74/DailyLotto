@@ -9,6 +9,7 @@ from predictor import store_daily_predictions, backfill_matches
 from seed import seed_database
 from backtest import backtest
 from datetime import date, timedelta
+import threading
 
 class TicketCheck(BaseModel):
     n1: int
@@ -27,9 +28,7 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-def startup():
-    init_db()
+def _startup_worker():
     try:
         seed_database()
     except Exception as e:
@@ -39,6 +38,20 @@ def startup():
         train_lstm()
     except Exception as e:
         print(f"LSTM training failed on startup: {e}")
+    try:
+        session = SessionLocal()
+        has_predictions = session.query(Prediction).first()
+        session.close()
+        if not has_predictions:
+            backtest(limit=500)
+    except Exception as e:
+        print(f"Backtest failed on startup: {e}")
+
+
+@app.on_event("startup")
+def startup():
+    init_db()
+    threading.Thread(target=_startup_worker, daemon=True).start()
 
 
 @app.get("/")
