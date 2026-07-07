@@ -3,7 +3,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 import os
 
 DATABASE_URL = "sqlite:///./data/daily_lotto.db"
-engine = create_engine(DATABASE_URL, echo=False)
+engine = create_engine(DATABASE_URL, echo=False, connect_args={"check_same_thread": False})
 Base = declarative_base()
 SessionLocal = sessionmaker(bind=engine)
 
@@ -37,3 +37,4 @@ class Prediction(Base):
 def init_db():
     os.makedirs("data", exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    engine.execute("PRAGMA journal_mode=WAL")
