@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy
+httpx
+beautifulsoup4
+tensorflow
+numpy
+pandas
+python-multipart
+apscheduler

@@ -1,0 +1,15 @@
+node_modules/
+.next/
+__pycache__/
+*.pyc
+.env.local
+.env
+venv/
+**/data/*.db
+**/data/*.npz
+.pio/
+.vscode/
+.DS_Store
+.playwright-mcp/
+docs/
+*.png
