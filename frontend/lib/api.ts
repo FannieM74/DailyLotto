@@ -37,6 +37,26 @@ export function getLstmPrediction() {
   return apiFetch("/predict/lstm");
 }
 
+export function getPairFreqPrediction() {
+  return apiFetch("/predict/pair-freq");
+}
+
+export function getDeltaPrediction() {
+  return apiFetch("/predict/delta");
+}
+
+export function getEnsemblePrediction() {
+  return apiFetch("/predict/ensemble");
+}
+
+export function getWeightedFreqPrediction() {
+  return apiFetch("/predict/weighted-freq");
+}
+
+export function getHotColdPrediction() {
+  return apiFetch("/predict/hot-cold");
+}
+
 export function checkTicket(n1: number, n2: number, n3: number, n4: number, n5: number) {
   return apiFetch("/checker", {
     method: "POST",

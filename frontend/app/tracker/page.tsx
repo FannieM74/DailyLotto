@@ -1,18 +1,30 @@
 "use client";
 import { useState, useEffect } from "react";
-import { getTracker, getWinRates, getFrequencyPrediction, getMarkovPrediction, getLstmPrediction } from "@/lib/api";
+import { getTracker, getWinRates,
+  getPairFreqPrediction, getDeltaPrediction, getEnsemblePrediction,
+  getWeightedFreqPrediction, getHotColdPrediction, getLstmPrediction } from "@/lib/api";
 import NumberBall from "@/components/NumberBall";
 
 const METHOD_COLORS: Record<string, string> = {
   frequency: "var(--accent)",
   markov: "#f59e0b",
   lstm: "var(--accent2)",
+  pair_freq: "#10b981",
+  delta: "#8b5cf6",
+  ensemble: "#f97316",
+  weighted_freq: "#06b6d4",
+  hot_cold: "#ec4899",
 };
 
 const METHOD_LABELS: Record<string, string> = {
   frequency: "F",
   markov: "M",
   lstm: "L",
+  pair_freq: "PF",
+  delta: "D",
+  ensemble: "E",
+  weighted_freq: "W",
+  hot_cold: "HC",
 };
 
 function TrackerBall({ n, matched }: { n: number; matched: boolean }) {
@@ -40,6 +52,26 @@ function MethodBadge({ method }: { method: string }) {
   );
 }
 
+const TODAY_FETCHERS: { key: string; fn: () => Promise<any> }[] = [
+  { key: "pair_freq", fn: () => getPairFreqPrediction().catch(() => ({ picks: [] })) },
+  { key: "delta", fn: () => getDeltaPrediction().catch(() => ({ picks: [] })) },
+  { key: "ensemble", fn: () => getEnsemblePrediction().catch(() => ({ picks: [] })) },
+  { key: "weighted_freq", fn: () => getWeightedFreqPrediction().catch(() => ({ picks: [] })) },
+  { key: "hot_cold", fn: () => getHotColdPrediction().catch(() => ({ picks: [] })) },
+  { key: "lstm", fn: () => getLstmPrediction().catch(() => ({ picks: [] })) },
+];
+
+const METHOD_NAMES: Record<string, string> = {
+  pair_freq: "Pair Freq",
+  delta: "Delta",
+  ensemble: "Ensemble",
+  weighted_freq: "Weighted",
+  hot_cold: "Hot/Cold",
+  lstm: "LSTM",
+  frequency: "Frequency",
+  markov: "Markov",
+};
+
 export default function TrackerPage() {
   const [predictions, setPredictions] = useState<any[]>([]);
   const [winRates, setWinRates] = useState<Record<string, any> | null>(null);
@@ -51,16 +83,12 @@ export default function TrackerPage() {
     Promise.all([
       getTracker(),
       getWinRates(),
-      getFrequencyPrediction().catch(() => ({ picks: [] })),
-      getMarkovPrediction().catch(() => ({ picks: [] })),
-      getLstmPrediction().catch(() => ({ picks: [] })),
-    ]).then(([preds, rates, freq, markov, lstm]) => {
+      ...TODAY_FETCHERS.map(t => t.fn()),
+    ]).then(([preds, rates, ...predResults]) => {
       if (Array.isArray(preds)) setPredictions(preds);
       if (!rates.error) setWinRates(rates);
       const picks: Record<string, number[]> = {};
-      if (freq.picks?.length) picks.frequency = freq.picks;
-      if (markov.picks?.length) picks.markov = markov.picks;
-      if (lstm.picks?.length) picks.lstm = lstm.picks;
+      predResults.forEach((r, i) => { if (r.picks?.length) picks[TODAY_FETCHERS[i].key] = r.picks; });
       setTodaysPicks(picks);
       setLoading(false);
     });
@@ -91,9 +119,14 @@ export default function TrackerPage() {
         <label>Method:</label>
         <select value={filterMethod} onChange={(e) => setFilterMethod(e.target.value)}>
           <option value="all">All Methods</option>
+          <option value="pair_freq">Pair Freq</option>
+          <option value="delta">Delta</option>
+          <option value="ensemble">Ensemble</option>
+          <option value="weighted_freq">Weighted</option>
+          <option value="hot_cold">Hot/Cold</option>
+          <option value="lstm">LSTM</option>
           <option value="frequency">Frequency</option>
           <option value="markov">Markov</option>
-          <option value="lstm">LSTM</option>
         </select>
       </div>
 
@@ -105,7 +138,7 @@ export default function TrackerPage() {
               display: "flex", alignItems: "center", gap: "0.75rem",
               marginBottom: "0.4rem", fontSize: "0.85rem"
             }}>
-              <span style={{ textTransform: "capitalize", fontWeight: 600, minWidth: "5rem" }}>{method}</span>
+              <span style={{ textTransform: "capitalize", fontWeight: 600, minWidth: "5rem" }}>{METHOD_NAMES[method] || method}</span>
               {picks.map((n, i) => <NumberBall key={i} n={n} small />)}
             </div>
           ))}

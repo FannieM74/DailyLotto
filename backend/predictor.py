@@ -3,6 +3,9 @@ from datetime import date
 from models.frequency import get_frequency_prediction
 from models.markov import get_markov_prediction
 from models.lstm import get_lstm_prediction
+from models.alternative import (get_pair_frequency_prediction, get_delta_prediction,
+                                get_ensemble_prediction, get_weighted_frequency_prediction,
+                                get_hot_cold_prediction)
 
 
 def store_daily_predictions():
@@ -12,6 +15,11 @@ def store_daily_predictions():
         "frequency": get_frequency_prediction,
         "markov": get_markov_prediction,
         "lstm": get_lstm_prediction,
+        "pair_freq": get_pair_frequency_prediction,
+        "delta": get_delta_prediction,
+        "ensemble": get_ensemble_prediction,
+        "weighted_freq": get_weighted_frequency_prediction,
+        "hot_cold": get_hot_cold_prediction,
     }
     for method_name, func in methods.items():
         result = func()

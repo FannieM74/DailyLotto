@@ -5,6 +5,9 @@ from database import init_db, SessionLocal, Draw, Prediction
 from models.frequency import get_frequency_prediction
 from models.markov import get_markov_prediction
 from models.lstm import get_lstm_prediction, train_lstm
+from models.alternative import (get_pair_frequency_prediction, get_delta_prediction,
+                                get_ensemble_prediction, get_weighted_frequency_prediction,
+                                get_hot_cold_prediction)
 from predictor import store_daily_predictions, backfill_matches
 from seed import seed_database
 from backtest import backtest
@@ -71,6 +74,31 @@ def predict_markov():
 @app.get("/predict/lstm")
 def predict_lstm():
     return get_lstm_prediction()
+
+
+@app.get("/predict/pair-freq")
+def predict_pair_freq():
+    return get_pair_frequency_prediction()
+
+
+@app.get("/predict/delta")
+def predict_delta():
+    return get_delta_prediction()
+
+
+@app.get("/predict/ensemble")
+def predict_ensemble():
+    return get_ensemble_prediction()
+
+
+@app.get("/predict/weighted-freq")
+def predict_weighted_freq():
+    return get_weighted_frequency_prediction()
+
+
+@app.get("/predict/hot-cold")
+def predict_hot_cold():
+    return get_hot_cold_prediction()
 
 
 @app.get("/draws/latest")

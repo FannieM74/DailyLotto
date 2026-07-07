@@ -3,6 +3,9 @@ from collections import Counter
 import numpy as np
 from models.lstm import load_model, predict_with_model, SEQ_LEN, NUM_NUMBERS
 
+N = 36
+PICK = 5
+
 
 def build_transition_matrix(draws):
     matrix = np.zeros((36, 36), dtype=float)
@@ -46,6 +49,84 @@ def markov_predict(prior_draws):
     return picked
 
 
+def pair_freq_predict(draws):
+    pairs = Counter()
+    for d in draws:
+        ns = sorted([d.n1, d.n2, d.n3, d.n4, d.n5])
+        for i in range(len(ns)):
+            for j in range(i + 1, len(ns)):
+                pairs[(ns[i], ns[j])] += 1
+    top = [p for p, _ in pairs.most_common(50)]
+    picked = []
+    for a, b in top:
+        if a not in picked: picked.append(a)
+        if len(picked) == 5: break
+        if b not in picked: picked.append(b)
+        if len(picked) == 5: break
+    return sorted(picked)
+
+
+def delta_predict(draws):
+    if not draws:
+        return list(range(1, 6))
+    deltas = Counter()
+    for d in draws:
+        ns = sorted([d.n1, d.n2, d.n3, d.n4, d.n5])
+        for i in range(len(ns) - 1):
+            deltas[ns[i + 1] - ns[i]] += 1
+    common = [d for d, _ in deltas.most_common(10)]
+    last_nums = [draws[-1].n1, draws[-1].n2, draws[-1].n3, draws[-1].n4, draws[-1].n5]
+    last = sorted(last_nums)
+    picked = set()
+    for start in last:
+        picked.add(start)
+        for delta in common:
+            n = start + delta
+            if 1 <= n <= 36 and n not in picked:
+                picked.add(n)
+            if len(picked) >= 5:
+                break
+        if len(picked) >= 5:
+            break
+    fill = 1
+    while len(picked) < 5:
+        if fill not in picked:
+            picked.add(fill)
+        fill += 1
+    return sorted(list(picked))[:5]
+
+
+def ensemble_predict(draws, freq_set):
+    weights = [0.0] * 36
+    for i, d in enumerate(draws):
+        w = 0.99 ** (len(draws) - 1 - i)
+        for n in [d.n1, d.n2, d.n3, d.n4, d.n5]:
+            weights[n - 1] += w
+    wfreq = set(sorted(range(1, 37), key=lambda x: weights[x - 1], reverse=True)[:5])
+    votes = Counter()
+    for n in freq_set: votes[n] += 1
+    for n in wfreq: votes[n] += 1
+    return sorted([n for n, _ in votes.most_common(5)])
+
+
+def weighted_freq_predict(draws):
+    weights = [0.0] * 36
+    for i, d in enumerate(draws):
+        w = 0.99 ** (len(draws) - 1 - i)
+        for n in [d.n1, d.n2, d.n3, d.n4, d.n5]:
+            weights[n - 1] += w
+    return sorted(range(1, 37), key=lambda x: weights[x - 1], reverse=True)[:5]
+
+
+def hot_cold_predict(draws):
+    c = Counter()
+    for d in draws:
+        for n in [d.n1, d.n2, d.n3, d.n4, d.n5]:
+            c[n] += 1
+    ranked = sorted(range(1, 37), key=lambda x: c.get(x, 0), reverse=True)
+    return sorted(ranked[:3] + ranked[-2:])
+
+
 def backtest(limit=500):
     session = SessionLocal()
     all_draws = session.query(Draw).order_by(Draw.draw_date).all()
@@ -66,7 +147,8 @@ def backtest(limit=500):
         counter[d.n4] += 1
         counter[d.n5] += 1
 
-    inserted = {"frequency": 0, "markov": 0, "lstm": 0}
+    inserted = {"frequency": 0, "markov": 0, "lstm": 0, "pair_freq": 0, "delta": 0,
+                 "ensemble": 0, "weighted_freq": 0, "hot_cold": 0}
 
     for i, draw in enumerate(target_draws):
         actual_set = {draw.n1, draw.n2, draw.n3, draw.n4, draw.n5}
@@ -104,6 +186,79 @@ def backtest(limit=500):
                         matches=markov_matches,
                     ))
                 inserted["markov"] += 1
+
+        if idx >= 1:
+            prior = all_draws[:idx]
+
+            pf_picks = pair_freq_predict(prior)
+            pf_matches = len(set(pf_picks) & actual_set)
+            existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="pair_freq").first()
+            if existing:
+                existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = pf_picks
+                existing.matches = pf_matches
+            else:
+                session.add(Prediction(
+                    draw_date=draw.draw_date, method="pair_freq",
+                    n1=pf_picks[0], n2=pf_picks[1], n3=pf_picks[2], n4=pf_picks[3], n5=pf_picks[4],
+                    matches=pf_matches,
+                ))
+            inserted["pair_freq"] += 1
+
+            d_picks = delta_predict(prior)
+            d_matches = len(set(d_picks) & actual_set)
+            existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="delta").first()
+            if existing:
+                existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = d_picks
+                existing.matches = d_matches
+            else:
+                session.add(Prediction(
+                    draw_date=draw.draw_date, method="delta",
+                    n1=d_picks[0], n2=d_picks[1], n3=d_picks[2], n4=d_picks[3], n5=d_picks[4],
+                    matches=d_matches,
+                ))
+            inserted["delta"] += 1
+
+            e_picks = ensemble_predict(prior, set(freq_picks))
+            e_matches = len(set(e_picks) & actual_set)
+            existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="ensemble").first()
+            if existing:
+                existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = e_picks
+                existing.matches = e_matches
+            else:
+                session.add(Prediction(
+                    draw_date=draw.draw_date, method="ensemble",
+                    n1=e_picks[0], n2=e_picks[1], n3=e_picks[2], n4=e_picks[3], n5=e_picks[4],
+                    matches=e_matches,
+                ))
+            inserted["ensemble"] += 1
+
+            wf_picks = weighted_freq_predict(prior)
+            wf_matches = len(set(wf_picks) & actual_set)
+            existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="weighted_freq").first()
+            if existing:
+                existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = wf_picks
+                existing.matches = wf_matches
+            else:
+                session.add(Prediction(
+                    draw_date=draw.draw_date, method="weighted_freq",
+                    n1=wf_picks[0], n2=wf_picks[1], n3=wf_picks[2], n4=wf_picks[3], n5=wf_picks[4],
+                    matches=wf_matches,
+                ))
+            inserted["weighted_freq"] += 1
+
+            hc_picks = hot_cold_predict(prior)
+            hc_matches = len(set(hc_picks) & actual_set)
+            existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="hot_cold").first()
+            if existing:
+                existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = hc_picks
+                existing.matches = hc_matches
+            else:
+                session.add(Prediction(
+                    draw_date=draw.draw_date, method="hot_cold",
+                    n1=hc_picks[0], n2=hc_picks[1], n3=hc_picks[2], n4=hc_picks[3], n5=hc_picks[4],
+                    matches=hc_matches,
+                ))
+            inserted["hot_cold"] += 1
 
         if lstm_params and idx >= SEQ_LEN:
             prior = all_draws[idx - SEQ_LEN : idx]

@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
-import { getLatestDraw, getRecentDraws, getWinRates, getFrequencyPrediction, getMarkovPrediction, getLstmPrediction } from "@/lib/api";
+import { getLatestDraw, getRecentDraws, getWinRates,
+  getLstmPrediction, getPairFreqPrediction, getDeltaPrediction,
+  getEnsemblePrediction, getWeightedFreqPrediction, getHotColdPrediction } from "@/lib/api";
 import NumberBall from "@/components/NumberBall";
 import DrawHistory from "@/components/DrawHistory";
 import PredictionCard from "@/components/PredictionCard";
@@ -11,33 +13,39 @@ interface DrawData {
   numbers: number[];
 }
 
+const PREDICTORS: { key: string; label: string; fetcher: () => Promise<any> }[] = [
+  { key: "pair_freq", label: "Pair Freq", fetcher: getPairFreqPrediction },
+  { key: "delta", label: "Delta", fetcher: getDeltaPrediction },
+  { key: "ensemble", label: "Ensemble", fetcher: getEnsemblePrediction },
+  { key: "weighted_freq", label: "Weighted", fetcher: getWeightedFreqPrediction },
+  { key: "hot_cold", label: "Hot/Cold", fetcher: getHotColdPrediction },
+  { key: "lstm", label: "AI", fetcher: getLstmPrediction },
+];
+
 export default function Dashboard() {
   const [latest, setLatest] = useState<DrawData | null>(null);
   const [recent, setRecent] = useState<DrawData[]>([]);
   const [winRates, setWinRates] = useState<Record<string, any> | null>(null);
-  const [freqPicks, setFreqPicks] = useState<number[] | null>(null);
-  const [markovPicks, setMarkovPicks] = useState<number[] | null>(null);
-  const [lstmPicks, setLstmPicks] = useState<number[] | null>(null);
+  const [picks, setPicks] = useState<Record<string, number[]>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     const fallback = setTimeout(() => setLoadError(true), 20000);
+    const fetchers = PREDICTORS.map(p => p.fetcher().catch(() => ({ picks: [] })));
     Promise.all([
       getLatestDraw(),
       getRecentDraws(7),
       getWinRates(),
-      getFrequencyPrediction(),
-      getMarkovPrediction(),
-      getLstmPrediction(),
-    ]).then(([latestData, recentData, rates, freq, markov, lstm]) => {
+      ...fetchers,
+    ]).then(([latestData, recentData, rates, ...predResults]) => {
       clearTimeout(fallback);
       if (!latestData.error) setLatest(latestData);
       setRecent(Array.isArray(recentData) ? recentData : []);
       if (!rates.error) setWinRates(rates);
-      if (!freq.error) setFreqPicks(freq.picks);
-      if (!markov.error) setMarkovPicks(markov.picks);
-      if (!lstm.error) setLstmPicks(lstm.picks);
+      const p: Record<string, number[]> = {};
+      predResults.forEach((r, i) => { if (r.picks?.length) p[PREDICTORS[i].key] = r.picks; });
+      setPicks(p);
       setLoading(false);
     });
   }, []);
@@ -64,9 +72,7 @@ export default function Dashboard() {
 
       <div className="grid-3">
         <h2 style={{gridColumn: "1 / -1", marginBottom: 0}}>Today's Predictions</h2>
-        {freqPicks && <PredictionCard title="Frequency" picks={freqPicks} />}
-        {markovPicks && <PredictionCard title="Markov" picks={markovPicks} />}
-        {lstmPicks && <PredictionCard title="AI" picks={lstmPicks} />}
+        {PREDICTORS.map(p => picks[p.key] && <PredictionCard key={p.key} title={p.label} picks={picks[p.key]} />)}
       </div>
 
       {winRates && (
