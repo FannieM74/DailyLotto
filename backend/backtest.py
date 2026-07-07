@@ -2,6 +2,7 @@ from database import SessionLocal, Draw, Prediction
 from collections import Counter
 import numpy as np
 from models.lstm import load_model, predict_with_model, SEQ_LEN, NUM_NUMBERS
+import threading
 
 
 def build_transition_matrix(draws):
@@ -46,7 +47,10 @@ def markov_predict(prior_draws):
     return picked
 
 
-def backtest(limit=500):
+_backtest_thread = None
+
+
+def _backtest_worker(limit=500):
     session = SessionLocal()
     all_draws = session.query(Draw).order_by(Draw.draw_date).all()
 
@@ -136,9 +140,24 @@ def backtest(limit=500):
         if (i + 1) % 100 == 0:
             print(f"Backtest progress: {i + 1}/{limit}")
 
+            if (i + 1) % 100 == 0:
+                session.commit()
+
     session.commit()
     total = session.query(Prediction).count()
     session.close()
 
     print(f"Backtest complete. Inserted/updated: {inserted}. Total predictions in DB: {total}")
-    return {"status": "ok", "inserted": inserted}
+
+
+def start_async_backtest(limit=500):
+    global _backtest_thread
+    if _backtest_thread and _backtest_thread.is_alive():
+        return {"status": "already_running"}
+    _backtest_thread = threading.Thread(target=_backtest_worker, args=(limit,), daemon=True)
+    _backtest_thread.start()
+    return {"status": "started", "limit": limit}
+
+
+def backtest(limit=500):
+    return start_async_backtest(limit)

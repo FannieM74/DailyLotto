@@ -7,8 +7,9 @@ from models.markov import get_markov_prediction
 from models.lstm import get_lstm_prediction, train_lstm
 from predictor import store_daily_predictions, backfill_matches
 from seed import seed_database
-from backtest import backtest
+from backtest import backtest, start_async_backtest
 from datetime import date, timedelta
+import threading
 
 class TicketCheck(BaseModel):
     n1: int
@@ -36,6 +37,7 @@ def startup():
     if not has_draws:
         seed_database()
         train_lstm()
+        threading.Thread(target=lambda: start_async_backtest(500), daemon=True).start()
 
 
 @app.get("/")
@@ -221,4 +223,4 @@ def backfill():
 
 @app.post("/backtest")
 def run_backtest(limit: int = 500):
-    return backtest(limit=limit)
+    return start_async_backtest(limit=limit)
