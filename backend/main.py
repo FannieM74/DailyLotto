@@ -31,14 +31,17 @@ app.add_middleware(
 @app.on_event("startup")
 def startup():
     init_db()
-    session = SessionLocal()
-    has_draws = session.query(Draw).first()
-    if not has_draws:
-        seed_database()
+
+    def _bg():
+        session = SessionLocal()
+        has_draws = session.query(Draw).first()
         session.close()
-        threading.Thread(target=lambda: (train_lstm(), start_async_backtest(500)), daemon=True).start()
-        return
-    session.close()
+        if not has_draws:
+            seed_database()
+            train_lstm()
+            start_async_backtest(500)
+
+    threading.Thread(target=_bg, daemon=True).start()
 
 
 @app.get("/")
