@@ -1,7 +1,5 @@
 from database import SessionLocal, Draw, Prediction
 from collections import Counter
-import numpy as np
-from models.lstm import load_model, predict_with_model, SEQ_LEN, NUM_NUMBERS
 
 
 def build_transition_matrix(draws):
@@ -56,7 +54,6 @@ def backtest(limit=500):
 
     target_draws = all_draws[-limit:]
     start_idx = len(all_draws) - limit
-    lstm_params = load_model()
 
     counter = Counter()
     for d in all_draws[:start_idx]:
@@ -66,7 +63,7 @@ def backtest(limit=500):
         counter[d.n4] += 1
         counter[d.n5] += 1
 
-    inserted = {"frequency": 0, "markov": 0, "lstm": 0}
+    inserted = {"frequency": 0, "markov": 0}
 
     for i, draw in enumerate(target_draws):
         actual_set = {draw.n1, draw.n2, draw.n3, draw.n4, draw.n5}
@@ -105,28 +102,6 @@ def backtest(limit=500):
                     ))
                 inserted["markov"] += 1
 
-        if lstm_params and idx >= SEQ_LEN:
-            prior = all_draws[idx - SEQ_LEN : idx]
-            seq_oh = np.zeros((SEQ_LEN, NUM_NUMBERS), dtype=np.float32)
-            for t, d in enumerate(prior):
-                for n in [d.n1, d.n2, d.n3, d.n4, d.n5]:
-                    seq_oh[t, n - 1] = 1.0
-            probs = predict_with_model(lstm_params, seq_oh)
-            top_indices = np.argsort(probs)[-5:][::-1]
-            lstm_picks = [int(i) + 1 for i in sorted(top_indices)]
-            lstm_matches = len(set(lstm_picks) & actual_set)
-            existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="lstm").first()
-            if existing:
-                existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = lstm_picks
-                existing.matches = lstm_matches
-            else:
-                session.add(Prediction(
-                    draw_date=draw.draw_date, method="lstm",
-                    n1=lstm_picks[0], n2=lstm_picks[1], n3=lstm_picks[2], n4=lstm_picks[3], n5=lstm_picks[4],
-                    matches=lstm_matches,
-                ))
-            inserted["lstm"] += 1
-
         counter[draw.n1] += 1
         counter[draw.n2] += 1
         counter[draw.n3] += 1
@@ -134,6 +109,7 @@ def backtest(limit=500):
         counter[draw.n5] += 1
 
         if (i + 1) % 100 == 0:
+            session.commit()
             print(f"Backtest progress: {i + 1}/{limit}")
 
     session.commit()
