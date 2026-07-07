@@ -37,4 +37,3 @@ class Prediction(Base):
 def init_db():
     os.makedirs("data", exist_ok=True)
     Base.metadata.create_all(bind=engine)
-    engine.execute("PRAGMA journal_mode=WAL")
