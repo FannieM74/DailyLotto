@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { getTracker, getWinRates, getFrequencyPrediction, getMarkovPrediction, getLstmPrediction } from "@/lib/api";
-import PredictionCard from "@/components/PredictionCard";
+import NumberBall from "@/components/NumberBall";
 
 const METHOD_COLORS: Record<string, string> = {
   frequency: "var(--accent)",
@@ -98,11 +98,17 @@ export default function TrackerPage() {
       </div>
 
       {Object.keys(filteredTodaysPicks).length > 0 && (
-        <div className="grid-3" style={{ marginBottom: "1.5rem" }}>
-          <h2 style={{ gridColumn: "1 / -1", margin: 0 }}>Today's Predictions</h2>
-          {filteredTodaysPicks.frequency && <PredictionCard title="Frequency" picks={filteredTodaysPicks.frequency} />}
-          {filteredTodaysPicks.markov && <PredictionCard title="Markov" picks={filteredTodaysPicks.markov} />}
-          {filteredTodaysPicks.lstm && <PredictionCard title="AI" picks={filteredTodaysPicks.lstm} />}
+        <div style={{ marginBottom: "1.5rem" }}>
+          <h3 style={{ margin: "0 0 0.5rem" }}>Today's Predictions</h3>
+          {(Object.entries(filteredTodaysPicks) as [string, number[]][]).map(([method, picks]) => (
+            <div key={method} style={{
+              display: "flex", alignItems: "center", gap: "0.75rem",
+              marginBottom: "0.4rem", fontSize: "0.85rem"
+            }}>
+              <span style={{ textTransform: "capitalize", fontWeight: 600, minWidth: "5rem" }}>{method}</span>
+              {picks.map((n, i) => <NumberBall key={i} n={n} small />)}
+            </div>
+          ))}
         </div>
       )}
 

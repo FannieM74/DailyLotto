@@ -186,11 +186,13 @@ h2 { font-size: 1.15rem; margin-bottom: 0.6rem; }
   color: #fbbf24;
   text-shadow: 0 0 6px rgba(251, 191, 36, 0.7);
 }
+.ball-small { width: 30px; height: 30px; font-size: 0.75rem; }
 @media (max-width: 768px) {
   .ball { width: 36px; height: 36px; font-size: 0.85rem; }
 }
 @media (max-width: 480px) {
   .ball { width: 32px; height: 32px; font-size: 0.75rem; }
+  .ball-small { width: 26px; height: 26px; font-size: 0.65rem; }
   .ball.matched::after { top: -3px; right: -3px; font-size: 10px; }
 
 }
