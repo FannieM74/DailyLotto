@@ -33,11 +33,12 @@ def startup():
     init_db()
     session = SessionLocal()
     has_draws = session.query(Draw).first()
-    session.close()
     if not has_draws:
         seed_database()
-        train_lstm()
-        threading.Thread(target=lambda: start_async_backtest(500), daemon=True).start()
+        session.close()
+        threading.Thread(target=lambda: (train_lstm(), start_async_backtest(500)), daemon=True).start()
+        return
+    session.close()
 
 
 @app.get("/")
