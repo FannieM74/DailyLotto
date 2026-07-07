@@ -63,6 +63,7 @@ export default function Dashboard() {
       )}
 
       <div className="grid-3">
+        <h2 style={{gridColumn: "1 / -1", marginBottom: 0}}>Today's Predictions</h2>
         {freqPicks && <PredictionCard title="Frequency" picks={freqPicks} />}
         {markovPicks && <PredictionCard title="Markov" picks={markovPicks} />}
         {lstmPicks && <PredictionCard title="AI" picks={lstmPicks} />}
