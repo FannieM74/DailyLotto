@@ -76,21 +76,16 @@ export default function TrackerPage() {
     ? { [filterMethod]: winRates[filterMethod] }
     : winRates;
 
+  const filteredTodaysPicks = filterMethod === "all"
+    ? todaysPicks
+    : { [filterMethod]: todaysPicks[filterMethod] };
+
   return (
     <div>
       <h1>Prediction Tracker</h1>
       <p style={{ color: "var(--text2)", marginBottom: "1rem" }}>
         Tracks accuracy of stored predictions vs actual draw results
       </p>
-
-      {Object.keys(todaysPicks).length > 0 && (
-        <div className="grid-3" style={{ marginBottom: "1.5rem" }}>
-          <h2 style={{ gridColumn: "1 / -1", margin: 0 }}>Today's Predictions</h2>
-          {todaysPicks.frequency && <PredictionCard title="Frequency" picks={todaysPicks.frequency} />}
-          {todaysPicks.markov && <PredictionCard title="Markov" picks={todaysPicks.markov} />}
-          {todaysPicks.lstm && <PredictionCard title="AI" picks={todaysPicks.lstm} />}
-        </div>
-      )}
 
       <div className="filter-bar">
         <label>Method:</label>
@@ -101,6 +96,15 @@ export default function TrackerPage() {
           <option value="lstm">LSTM</option>
         </select>
       </div>
+
+      {Object.keys(filteredTodaysPicks).length > 0 && (
+        <div className="grid-3" style={{ marginBottom: "1.5rem" }}>
+          <h2 style={{ gridColumn: "1 / -1", margin: 0 }}>Today's Predictions</h2>
+          {filteredTodaysPicks.frequency && <PredictionCard title="Frequency" picks={filteredTodaysPicks.frequency} />}
+          {filteredTodaysPicks.markov && <PredictionCard title="Markov" picks={filteredTodaysPicks.markov} />}
+          {filteredTodaysPicks.lstm && <PredictionCard title="AI" picks={filteredTodaysPicks.lstm} />}
+        </div>
+      )}
 
       {filteredWinRates && (
         <div className="grid-3" style={{ marginBottom: "1.5rem" }}>
