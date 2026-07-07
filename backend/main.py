@@ -30,6 +30,15 @@ app.add_middleware(
 @app.on_event("startup")
 def startup():
     init_db()
+    try:
+        seed_database()
+    except Exception as e:
+        print(f"Seed failed on startup: {e}")
+    try:
+        from models.lstm import train_lstm
+        train_lstm()
+    except Exception as e:
+        print(f"LSTM training failed on startup: {e}")
 
 
 @app.get("/")
