@@ -19,8 +19,10 @@ export default function Dashboard() {
   const [markovPicks, setMarkovPicks] = useState<number[] | null>(null);
   const [lstmPicks, setLstmPicks] = useState<number[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
+    const fallback = setTimeout(() => setLoadError(true), 20000);
     Promise.all([
       getLatestDraw(),
       getRecentDraws(7),
@@ -29,6 +31,7 @@ export default function Dashboard() {
       getMarkovPrediction(),
       getLstmPrediction(),
     ]).then(([latestData, recentData, rates, freq, markov, lstm]) => {
+      clearTimeout(fallback);
       if (!latestData.error) setLatest(latestData);
       setRecent(Array.isArray(recentData) ? recentData : []);
       if (!rates.error) setWinRates(rates);
@@ -39,7 +42,7 @@ export default function Dashboard() {
     });
   }, []);
 
-  if (loading) return <div className="loading">Loading dashboard...</div>;
+  if (loading) return <div className="loading">{loadError ? "Dashboard timed out — please refresh" : "Loading dashboard..."}</div>;
 
   return (
     <div>

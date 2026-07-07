@@ -1,45 +1,54 @@
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-export async function getLatestDraw() {
-  const res = await fetch(`${API}/draws/latest`, { cache: "no-store" });
-  return res.json();
+async function apiFetch(path: string, options?: RequestInit) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(`${API}${path}`, {
+      ...options,
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    clearTimeout(timeout);
+    return res.json();
+  } catch {
+    clearTimeout(timeout);
+    return { error: "Network error or timeout" };
+  }
 }
 
-export async function getRecentDraws(days = 7) {
-  const res = await fetch(`${API}/draws/recent?days=${days}`, { cache: "no-store" });
-  return res.json();
+export function getLatestDraw() {
+  return apiFetch("/draws/latest");
 }
 
-export async function getFrequencyPrediction() {
-  const res = await fetch(`${API}/predict/frequency`, { cache: "no-store" });
-  return res.json();
+export function getRecentDraws(days = 7) {
+  return apiFetch(`/draws/recent?days=${days}`);
 }
 
-export async function getMarkovPrediction() {
-  const res = await fetch(`${API}/predict/markov`, { cache: "no-store" });
-  return res.json();
+export function getFrequencyPrediction() {
+  return apiFetch("/predict/frequency");
 }
 
-export async function getLstmPrediction() {
-  const res = await fetch(`${API}/predict/lstm`, { cache: "no-store" });
-  return res.json();
+export function getMarkovPrediction() {
+  return apiFetch("/predict/markov");
 }
 
-export async function checkTicket(n1: number, n2: number, n3: number, n4: number, n5: number) {
-  const res = await fetch(`${API}/checker`, {
+export function getLstmPrediction() {
+  return apiFetch("/predict/lstm");
+}
+
+export function checkTicket(n1: number, n2: number, n3: number, n4: number, n5: number) {
+  return apiFetch("/checker", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ n1, n2, n3, n4, n5 }),
   });
-  return res.json();
 }
 
-export async function getTracker() {
-  const res = await fetch(`${API}/tracker`, { cache: "no-store" });
-  return res.json();
+export function getTracker() {
+  return apiFetch("/tracker");
 }
 
-export async function getWinRates() {
-  const res = await fetch(`${API}/tracker/win-rates`, { cache: "no-store" });
-  return res.json();
+export function getWinRates() {
+  return apiFetch("/tracker/win-rates");
 }
