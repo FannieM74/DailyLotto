@@ -1,5 +1,6 @@
 from database import SessionLocal, Draw, Prediction
 from collections import Counter
+import numpy as np
 
 
 def build_transition_matrix(draws):
