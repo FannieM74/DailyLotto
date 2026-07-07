@@ -2,6 +2,9 @@ import os
 import json
 import numpy as np
 from database import SessionLocal, Draw
+import threading
+
+_training_lock = threading.Lock()
 
 MODEL_PATH = os.path.join(
     os.path.dirname(__file__), "..", "data", "lstm_model.npz"
@@ -73,9 +76,13 @@ def forward(X, params):
 
 
 def train_lstm(epochs=EPOCHS):
+    if not _training_lock.acquire(blocking=False):
+        print("Training already in progress, skipping")
+        return True
     X, y = draws_to_sequences()
     if X is None:
         print("Not enough data to train")
+        _training_lock.release()
         return False
 
     params = init_weights()
@@ -106,6 +113,7 @@ def train_lstm(epochs=EPOCHS):
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
     np.savez(MODEL_PATH, **params)
     print(f"Model saved to {MODEL_PATH}")
+    _training_lock.release()
     return True
 
 
