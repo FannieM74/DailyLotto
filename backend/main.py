@@ -193,6 +193,14 @@ def seed():
     return {"status": "seeded"}
 
 
+@app.post("/train")
+def train():
+    from models.lstm import train_lstm
+    ok = train_lstm()
+    if not ok:
+        return {"error": "Not enough data to train"}
+    return {"status": "model trained"}
+
 @app.post("/retrain")
 def retrain():
     store_daily_predictions()
