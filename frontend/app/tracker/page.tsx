@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
-import { getTracker, getWinRates } from "@/lib/api";
+import { getTracker, getWinRates, getFrequencyPrediction, getMarkovPrediction, getLstmPrediction } from "@/lib/api";
+import PredictionCard from "@/components/PredictionCard";
 
 const METHOD_COLORS: Record<string, string> = {
   frequency: "var(--accent)",
@@ -42,13 +43,25 @@ function MethodBadge({ method }: { method: string }) {
 export default function TrackerPage() {
   const [predictions, setPredictions] = useState<any[]>([]);
   const [winRates, setWinRates] = useState<Record<string, any> | null>(null);
+  const [todaysPicks, setTodaysPicks] = useState<Record<string, number[]>>({});
   const [loading, setLoading] = useState(true);
   const [filterMethod, setFilterMethod] = useState("all");
 
   useEffect(() => {
-    Promise.all([getTracker(), getWinRates()]).then(([preds, rates]) => {
+    Promise.all([
+      getTracker(),
+      getWinRates(),
+      getFrequencyPrediction().catch(() => ({ picks: [] })),
+      getMarkovPrediction().catch(() => ({ picks: [] })),
+      getLstmPrediction().catch(() => ({ picks: [] })),
+    ]).then(([preds, rates, freq, markov, lstm]) => {
       if (Array.isArray(preds)) setPredictions(preds);
       if (!rates.error) setWinRates(rates);
+      const picks: Record<string, number[]> = {};
+      if (freq.picks?.length) picks.frequency = freq.picks;
+      if (markov.picks?.length) picks.markov = markov.picks;
+      if (lstm.picks?.length) picks.lstm = lstm.picks;
+      setTodaysPicks(picks);
       setLoading(false);
     });
   }, []);
@@ -69,6 +82,15 @@ export default function TrackerPage() {
       <p style={{ color: "var(--text2)", marginBottom: "1rem" }}>
         Tracks accuracy of stored predictions vs actual draw results
       </p>
+
+      {Object.keys(todaysPicks).length > 0 && (
+        <div className="grid-3" style={{ marginBottom: "1.5rem" }}>
+          <h2 style={{ gridColumn: "1 / -1", margin: 0 }}>Today's Predictions</h2>
+          {todaysPicks.frequency && <PredictionCard title="Frequency" picks={todaysPicks.frequency} />}
+          {todaysPicks.markov && <PredictionCard title="Markov" picks={todaysPicks.markov} />}
+          {todaysPicks.lstm && <PredictionCard title="AI" picks={todaysPicks.lstm} />}
+        </div>
+      )}
 
       <div className="filter-bar">
         <label>Method:</label>
