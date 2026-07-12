@@ -1,87 +1,125 @@
 "use client";
 import { useState, useEffect } from "react";
-import { getLatestDraw, getRecentDraws, getWinRates,
-  getLstmPrediction, getPairFreqPrediction, getDeltaPrediction,
-  getEnsemblePrediction, getWeightedFreqPrediction, getHotColdPrediction } from "@/lib/api";
+import { getTracker, getWinRates, getTodayPredictions } from "@/lib/api";
+import { useGame } from "@/context/GameContext";
 import NumberBall from "@/components/NumberBall";
-import DrawHistory from "@/components/DrawHistory";
-import PredictionCard from "@/components/PredictionCard";
+import TodaysPredictions from "@/components/TodaysPredictions";
+import { METHOD_COLORS, METHOD_LABELS, METHOD_NAMES } from "@/lib/constants";
 
-interface DrawData {
-  id: number;
-  date: string;
-  numbers: number[];
+function TrackerBall({ n, matched }: { n: number; matched: boolean }) {
+  const hue = (n * 10) % 360;
+  return (
+    <span
+      className={`ball${matched ? " matched" : ""}`}
+      style={{
+        background: `linear-gradient(135deg, hsl(${hue}, 70%, 50%), hsl(${hue + 40}, 70%, 55%))`,
+      }}
+    >
+      {n}
+    </span>
+  );
 }
 
-const PREDICTORS: { key: string; label: string; fetcher: () => Promise<any> }[] = [
-  { key: "pair_freq", label: "Pair Freq", fetcher: getPairFreqPrediction },
-  { key: "delta", label: "Delta", fetcher: getDeltaPrediction },
-  { key: "ensemble", label: "Ensemble", fetcher: getEnsemblePrediction },
-  { key: "weighted_freq", label: "Weighted", fetcher: getWeightedFreqPrediction },
-  { key: "hot_cold", label: "Hot/Cold", fetcher: getHotColdPrediction },
-  { key: "lstm", label: "AI", fetcher: getLstmPrediction },
-];
+function MethodBadge({ method }: { method: string }) {
+  return (
+    <span
+      className="method-badge"
+      style={{ background: METHOD_COLORS[method] || "var(--accent)" }}
+    >
+      {METHOD_LABELS[method] || method[0].toUpperCase()}
+    </span>
+  );
+}
+
+function ConsensusRow({ picks }: { picks: Record<string, number[]> }) {
+  const counter: Record<number, number> = {};
+  const totalMethods = Object.keys(picks).length;
+  for (const nums of Object.values(picks)) {
+    for (const n of nums) {
+      counter[n] = (counter[n] || 0) + 1;
+    }
+  }
+  const sorted = Object.entries(counter).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const maxCount = sorted[0]?.[1] || 0;
+  return (
+    <div className="consensus-row">
+      <span className="consensus-label">Consensus</span>
+      {sorted.map(([num, count]) => (
+        <span key={num} className={`consensus-ball${count === totalMethods ? " consensus-unanimous" : ""}`}>
+          <span className="consensus-num">{num}</span>
+          <span className="consensus-count">×{count}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export default function Dashboard() {
-  const [latest, setLatest] = useState<DrawData | null>(null);
-  const [recent, setRecent] = useState<DrawData[]>([]);
+  const { game, method } = useGame();
+  const [predictions, setPredictions] = useState<any[]>([]);
   const [winRates, setWinRates] = useState<Record<string, any> | null>(null);
-  const [picks, setPicks] = useState<Record<string, number[]>>({});
+  const [todaysPicks, setTodaysPicks] = useState<Record<string, number[]>>({});
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    const fallback = setTimeout(() => setLoadError(true), 20000);
-    const fetchers = PREDICTORS.map(p => p.fetcher().catch(() => ({ picks: [] })));
+    setLoading(true);
     Promise.all([
-      getLatestDraw(),
-      getRecentDraws(7),
-      getWinRates(),
-      ...fetchers,
-    ]).then(([latestData, recentData, rates, ...predResults]) => {
-      clearTimeout(fallback);
-      if (!latestData.error) setLatest(latestData);
-      setRecent(Array.isArray(recentData) ? recentData : []);
+      getTracker(game),
+      getWinRates(game),
+      getTodayPredictions(game),
+    ]).then(([preds, rates, today]) => {
+      if (Array.isArray(preds)) setPredictions(preds);
       if (!rates.error) setWinRates(rates);
-      const p: Record<string, number[]> = {};
-      predResults.forEach((r, i) => { if (r.picks?.length) p[PREDICTORS[i].key] = r.picks; });
-      setPicks(p);
+      if (today?.picks) setTodaysPicks(today.picks);
+      else setTodaysPicks({});
       setLoading(false);
     });
-  }, []);
+  }, [game]);
 
-  if (loading) return <div className="loading">{loadError ? "Dashboard timed out — please refresh" : "Loading dashboard..."}</div>;
+  if (loading) return <div className="loading">Loading...</div>;
+
+  const filteredPreds = method === "all"
+    ? predictions
+    : predictions.filter((p) => p.method === method);
+
+  const filteredWinRates = winRates && method !== "all"
+    ? { [method]: winRates[method] }
+    : winRates;
+
+  const filteredTodaysPicks = method === "all"
+    ? todaysPicks
+    : todaysPicks[method] ? { [method]: todaysPicks[method] } : {};
+
+  // Consensus is only shown when method is "all" and we have multiple methods with picks
+  const consensusPicks = method === "all" && Object.keys(todaysPicks).length > 0
+    ? (() => {
+        const byDate: Record<string, Record<string, number[]>> = {};
+        for (const p of predictions) {
+          if (!byDate[p.date]) byDate[p.date] = {};
+          const nums = [p.prediction].flat();
+          byDate[p.date][p.method] = nums;
+        }
+        const dates = Object.keys(byDate).sort().reverse();
+        return dates.length > 0 ? byDate[dates[0]] : {};
+      })()
+    : {};
 
   return (
     <div>
-      <h1>DailyLotto Dashboard</h1>
+      <h1>Dashboard</h1>
 
-      {latest && (
-        <div className="pred-card" style={{ marginBottom: "1.25rem" }}>
-          <div className="pred-card-header">
-            <div className="pred-card-date">{latest.date}</div>
-            <div style={{ color: "var(--text2)", fontSize: "0.85rem" }}>#{latest.id}</div>
-          </div>
-          <div className="balls">
-            {latest.numbers.map((n, i) => (
-              <NumberBall key={i} n={n} />
-            ))}
-          </div>
-        </div>
+      <TodaysPredictions todaysPicks={filteredTodaysPicks} method={method} />
+
+      {method === "all" && Object.keys(consensusPicks).length > 1 && (
+        <ConsensusRow picks={consensusPicks} />
       )}
 
-      <div className="grid-3">
-        <h2 style={{gridColumn: "1 / -1", marginBottom: 0}}>Today's Predictions</h2>
-        {PREDICTORS.map(p => picks[p.key] && <PredictionCard key={p.key} title={p.label} picks={picks[p.key]} />)}
-      </div>
-
-      {winRates && (
-        <div className="card">
-          <h2>Win Rates</h2>
-          <div className="grid-2">
-            {Object.entries(winRates).map(([method, stats]: [string, any]) => (
-              <div key={method} className="card" style={{ margin: 0 }}>
-                <h2 style={{ textTransform: "capitalize" }}>{method}</h2>
+      {filteredWinRates && (
+        <div className="grid-3" style={{ marginBottom: "1.5rem" }}>
+          {Object.entries(filteredWinRates).map(([methodKey, stats]: [string, any]) => (
+            stats && (
+              <div className="card" key={methodKey} style={{ margin: 0 }}>
+                <h2>{METHOD_NAMES[methodKey] || methodKey}</h2>
                 <div className="stats-row">
                   <div className="stat">
                     <div className="stat-value">{stats.total_predictions}</div>
@@ -101,12 +139,71 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+            )
+          ))}
         </div>
       )}
 
-      <DrawHistory draws={recent} />
+      <h2 style={{ marginBottom: "0.75rem" }}>
+        Recent Predictions
+        {method !== "all" && (
+          <span style={{ color: "var(--text2)", fontWeight: 400, fontSize: "0.9rem" }}>
+            {" "}({METHOD_NAMES[method] || method})
+          </span>
+        )}
+      </h2>
+
+      {filteredPreds.length === 0 ? (
+        <div className="card">
+          <p style={{ color: "var(--text2)" }}>
+            No predictions found{method !== "all" ? ` for ${method}` : ""}.
+            {predictions.length === 0 && <> Run <code>POST /retrain</code> to generate daily predictions.</>}
+          </p>
+        </div>
+      ) : (
+        <div className="pred-list">
+          {filteredPreds.map((p) => {
+            const matchSet = new Set(p.matching_numbers || []);
+            return (
+              <div key={p.id} className="pred-card">
+                <div className="pred-card-header">
+                  <div className="pred-card-date">
+                    {p.date}
+                    <MethodBadge method={p.method} />
+                  </div>
+                  <div>
+                    {p.matches !== null ? (
+                      <span className={`match-badge match-${p.matches}`}>
+                        {p.matches} match{p.matches !== 1 ? "es" : ""}
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--text2)", fontSize: "0.8rem" }}>Pending</span>
+                    )}
+                  </div>
+                </div>
+                <div className="pred-row">
+                  <div className="balls">
+                    {p.prediction.map((n: number, i: number) => (
+                      <TrackerBall key={i} n={n} matched={matchSet.has(n)} />
+                    ))}
+                  </div>
+                </div>
+                <div className="pred-actual-row">
+                  {p.draw_numbers ? (
+                    <div className="actual-balls">
+                      {p.draw_numbers.map((n: number, i: number) => (
+                        <span key={i} className="actual-ball">{n}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span style={{ color: "var(--text2)", fontSize: "0.8rem" }}>No draw yet</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
