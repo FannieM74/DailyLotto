@@ -1,17 +1,22 @@
 from database import SessionLocal, Draw, Prediction
 from collections import Counter
 import numpy as np
-from models.lstm import load_model, predict_with_model, SEQ_LEN, NUM_NUMBERS
-
-N = 36
-PICK = 5
+from models.lstm import load_model, predict_with_model, SEQ_LEN
+from games import GAMES
 
 
-def build_transition_matrix(draws):
-    matrix = np.zeros((36, 36), dtype=float)
+def _get_nums(d, pick_count):
+    nums = [d.n1, d.n2, d.n3, d.n4, d.n5]
+    if pick_count > 5 and d.n6 is not None:
+        nums.append(d.n6)
+    return nums
+
+
+def build_transition_matrix(draws, n_size, pick_count):
+    matrix = np.zeros((n_size, n_size), dtype=float)
     for i in range(len(draws) - 1):
-        curr_nums = {draws[i].n1, draws[i].n2, draws[i].n3, draws[i].n4, draws[i].n5}
-        next_nums = {draws[i + 1].n1, draws[i + 1].n2, draws[i + 1].n3, draws[i + 1].n4, draws[i + 1].n5}
+        curr_nums = set(_get_nums(draws[i], pick_count))
+        next_nums = set(_get_nums(draws[i + 1], pick_count))
         for c in curr_nums:
             for n in next_nums:
                 matrix[c - 1][n - 1] += 1
@@ -21,16 +26,16 @@ def build_transition_matrix(draws):
     return matrix
 
 
-def markov_predict(prior_draws):
+def markov_predict(prior_draws, n_size, pick_count):
     if len(prior_draws) < 2:
         return None
-    matrix = build_transition_matrix(prior_draws)
+    matrix = build_transition_matrix(prior_draws, n_size, pick_count)
     last = prior_draws[-1]
-    last_nums = [last.n1, last.n2, last.n3, last.n4, last.n5]
+    last_nums = _get_nums(last, pick_count)
     candidates = {}
     for n in last_nums:
         probs = matrix[n - 1]
-        for i in range(36):
+        for i in range(n_size):
             if probs[i] > 0:
                 candidates[i + 1] = candidates.get(i + 1, 0) + probs[i]
     sorted_candidates = sorted(candidates.items(), key=lambda x: x[1], reverse=True)
@@ -38,21 +43,21 @@ def markov_predict(prior_draws):
     for num, _ in sorted_candidates:
         if num not in picked:
             picked.append(num)
-        if len(picked) == 5:
+        if len(picked) == pick_count:
             break
-    while len(picked) < 5:
-        for i in range(1, 37):
+    while len(picked) < pick_count:
+        for i in range(1, n_size + 1):
             if i not in picked:
                 picked.append(i)
-                if len(picked) == 5:
+                if len(picked) == pick_count:
                     break
     return picked
 
 
-def pair_freq_predict(draws):
+def pair_freq_predict(draws, pick_count):
     pairs = Counter()
     for d in draws:
-        ns = sorted([d.n1, d.n2, d.n3, d.n4, d.n5])
+        ns = sorted(_get_nums(d, pick_count))
         for i in range(len(ns)):
             for j in range(i + 1, len(ns)):
                 pairs[(ns[i], ns[j])] += 1
@@ -60,76 +65,81 @@ def pair_freq_predict(draws):
     picked = []
     for a, b in top:
         if a not in picked: picked.append(a)
-        if len(picked) == 5: break
+        if len(picked) == pick_count: break
         if b not in picked: picked.append(b)
-        if len(picked) == 5: break
+        if len(picked) == pick_count: break
     return sorted(picked)
 
 
-def delta_predict(draws):
+def delta_predict(draws, n_size, pick_count):
     if not draws:
-        return list(range(1, 6))
+        return list(range(1, pick_count + 1))
     deltas = Counter()
     for d in draws:
-        ns = sorted([d.n1, d.n2, d.n3, d.n4, d.n5])
+        ns = sorted(_get_nums(d, pick_count))
         for i in range(len(ns) - 1):
             deltas[ns[i + 1] - ns[i]] += 1
     common = [d for d, _ in deltas.most_common(10)]
-    last_nums = [draws[-1].n1, draws[-1].n2, draws[-1].n3, draws[-1].n4, draws[-1].n5]
-    last = sorted(last_nums)
+    last = sorted(_get_nums(draws[-1], pick_count))
     picked = set()
     for start in last:
         picked.add(start)
         for delta in common:
             n = start + delta
-            if 1 <= n <= 36 and n not in picked:
+            if 1 <= n <= n_size and n not in picked:
                 picked.add(n)
-            if len(picked) >= 5:
+            if len(picked) >= pick_count:
                 break
-        if len(picked) >= 5:
+        if len(picked) >= pick_count:
             break
     fill = 1
-    while len(picked) < 5:
+    while len(picked) < pick_count:
         if fill not in picked:
             picked.add(fill)
         fill += 1
-    return sorted(list(picked))[:5]
+    return sorted(list(picked))[:pick_count]
 
 
-def ensemble_predict(draws, freq_set):
-    weights = [0.0] * 36
+def ensemble_predict(draws, freq_set, n_size, pick_count):
+    weights = [0.0] * n_size
     for i, d in enumerate(draws):
         w = 0.99 ** (len(draws) - 1 - i)
-        for n in [d.n1, d.n2, d.n3, d.n4, d.n5]:
+        for n in _get_nums(d, pick_count):
             weights[n - 1] += w
-    wfreq = set(sorted(range(1, 37), key=lambda x: weights[x - 1], reverse=True)[:5])
+    wfreq = set(sorted(range(1, n_size + 1), key=lambda x: weights[x - 1], reverse=True)[:pick_count])
     votes = Counter()
     for n in freq_set: votes[n] += 1
     for n in wfreq: votes[n] += 1
-    return sorted([n for n, _ in votes.most_common(5)])
+    return sorted([n for n, _ in votes.most_common(pick_count)])
 
 
-def weighted_freq_predict(draws):
-    weights = [0.0] * 36
+def weighted_freq_predict(draws, n_size, pick_count):
+    weights = [0.0] * n_size
     for i, d in enumerate(draws):
         w = 0.99 ** (len(draws) - 1 - i)
-        for n in [d.n1, d.n2, d.n3, d.n4, d.n5]:
+        for n in _get_nums(d, pick_count):
             weights[n - 1] += w
-    return sorted(range(1, 37), key=lambda x: weights[x - 1], reverse=True)[:5]
+    return sorted(range(1, n_size + 1), key=lambda x: weights[x - 1], reverse=True)[:pick_count]
 
 
-def hot_cold_predict(draws):
+def hot_cold_predict(draws, n_size, pick_count):
     c = Counter()
     for d in draws:
-        for n in [d.n1, d.n2, d.n3, d.n4, d.n5]:
+        for n in _get_nums(d, pick_count):
             c[n] += 1
-    ranked = sorted(range(1, 37), key=lambda x: c.get(x, 0), reverse=True)
-    return sorted(ranked[:3] + ranked[-2:])
+    ranked = sorted(range(1, n_size + 1), key=lambda x: c.get(x, 0), reverse=True)
+    hot_count = min(3, pick_count)
+    cold_count = pick_count - hot_count
+    return sorted(ranked[:hot_count] + ranked[-cold_count:])
 
 
-def backtest(limit=500):
+def backtest(game, limit=500):
+    cfg = GAMES[game]
+    N = cfg["max_number"]
+    PICK = cfg["pick_count"]
+
     session = SessionLocal()
-    all_draws = session.query(Draw).order_by(Draw.draw_date).all()
+    all_draws = session.query(Draw).filter(Draw.game == game).order_by(Draw.draw_date).all()
 
     if len(all_draws) < 100:
         session.close()
@@ -137,158 +147,140 @@ def backtest(limit=500):
 
     target_draws = all_draws[-limit:]
     start_idx = len(all_draws) - limit
-    lstm_params = load_model()
-
-    counter = Counter()
-    for d in all_draws[:start_idx]:
-        counter[d.n1] += 1
-        counter[d.n2] += 1
-        counter[d.n3] += 1
-        counter[d.n4] += 1
-        counter[d.n5] += 1
+    lstm_params = load_model(game)
 
     inserted = {"frequency": 0, "markov": 0, "lstm": 0, "pair_freq": 0, "delta": 0,
                  "ensemble": 0, "weighted_freq": 0, "hot_cold": 0}
 
-    for i, draw in enumerate(target_draws):
-        actual_set = {draw.n1, draw.n2, draw.n3, draw.n4, draw.n5}
-        idx = start_idx + i
+    WINDOW = 200
 
-        if counter:
-            sorted_nums = sorted(range(1, 37), key=lambda x: counter.get(x, 0), reverse=True)
-            freq_picks = sorted_nums[:5]
+    for i, draw in enumerate(target_draws):
+        actual_set = set(_get_nums(draw, PICK))
+        idx = start_idx + i
+        prior = all_draws[:idx]
+        pw = prior[-WINDOW:] if len(prior) > WINDOW else prior
+
+        if len(pw) >= 10:
+            wc = Counter()
+            for d in pw:
+                for n in _get_nums(d, PICK):
+                    wc[n] += 1
+            sorted_nums = sorted(range(1, N + 1), key=lambda x: wc.get(x, 0), reverse=True)
+            freq_picks = sorted_nums[:PICK]
             freq_matches = len(set(freq_picks) & actual_set)
-            existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="frequency").first()
+            existing = session.query(Prediction).filter_by(game=game, draw_date=draw.draw_date, method="frequency").first()
+            pred_data = {"game": game, "draw_date": draw.draw_date, "method": "frequency", "matches": freq_matches}
+            for j, n in enumerate(freq_picks):
+                pred_data[f"n{j + 1}"] = n
             if existing:
-                existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = freq_picks
-                existing.matches = freq_matches
+                for k, v in pred_data.items():
+                    setattr(existing, k, v)
             else:
-                session.add(Prediction(
-                    draw_date=draw.draw_date, method="frequency",
-                    n1=freq_picks[0], n2=freq_picks[1], n3=freq_picks[2], n4=freq_picks[3], n5=freq_picks[4],
-                    matches=freq_matches,
-                ))
+                session.add(Prediction(**pred_data))
             inserted["frequency"] += 1
 
-        if idx >= 1:
-            prior = all_draws[:idx]
-            markov_picks = markov_predict(prior)
+        if len(pw) >= 2:
+            markov_picks = markov_predict(pw, N, PICK)
             if markov_picks:
                 markov_matches = len(set(markov_picks) & actual_set)
-                existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="markov").first()
+                existing = session.query(Prediction).filter_by(game=game, draw_date=draw.draw_date, method="markov").first()
+                pred_data = {"game": game, "draw_date": draw.draw_date, "method": "markov", "matches": markov_matches}
+                for j, n in enumerate(markov_picks):
+                    pred_data[f"n{j + 1}"] = n
                 if existing:
-                    existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = markov_picks
-                    existing.matches = markov_matches
+                    for k, v in pred_data.items():
+                        setattr(existing, k, v)
                 else:
-                    session.add(Prediction(
-                        draw_date=draw.draw_date, method="markov",
-                        n1=markov_picks[0], n2=markov_picks[1], n3=markov_picks[2], n4=markov_picks[3], n5=markov_picks[4],
-                        matches=markov_matches,
-                    ))
+                    session.add(Prediction(**pred_data))
                 inserted["markov"] += 1
 
-        if idx >= 1:
-            prior = all_draws[:idx]
-
-            pf_picks = pair_freq_predict(prior)
+            pf_picks = pair_freq_predict(pw, PICK)
             pf_matches = len(set(pf_picks) & actual_set)
-            existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="pair_freq").first()
+            existing = session.query(Prediction).filter_by(game=game, draw_date=draw.draw_date, method="pair_freq").first()
+            pred_data = {"game": game, "draw_date": draw.draw_date, "method": "pair_freq", "matches": pf_matches}
+            for j, n in enumerate(pf_picks):
+                pred_data[f"n{j + 1}"] = n
             if existing:
-                existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = pf_picks
-                existing.matches = pf_matches
+                for k, v in pred_data.items():
+                    setattr(existing, k, v)
             else:
-                session.add(Prediction(
-                    draw_date=draw.draw_date, method="pair_freq",
-                    n1=pf_picks[0], n2=pf_picks[1], n3=pf_picks[2], n4=pf_picks[3], n5=pf_picks[4],
-                    matches=pf_matches,
-                ))
+                session.add(Prediction(**pred_data))
             inserted["pair_freq"] += 1
 
-            d_picks = delta_predict(prior)
+            d_picks = delta_predict(pw, N, PICK)
             d_matches = len(set(d_picks) & actual_set)
-            existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="delta").first()
+            existing = session.query(Prediction).filter_by(game=game, draw_date=draw.draw_date, method="delta").first()
+            pred_data = {"game": game, "draw_date": draw.draw_date, "method": "delta", "matches": d_matches}
+            for j, n in enumerate(d_picks):
+                pred_data[f"n{j + 1}"] = n
             if existing:
-                existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = d_picks
-                existing.matches = d_matches
+                for k, v in pred_data.items():
+                    setattr(existing, k, v)
             else:
-                session.add(Prediction(
-                    draw_date=draw.draw_date, method="delta",
-                    n1=d_picks[0], n2=d_picks[1], n3=d_picks[2], n4=d_picks[3], n5=d_picks[4],
-                    matches=d_matches,
-                ))
+                session.add(Prediction(**pred_data))
             inserted["delta"] += 1
 
-            e_picks = ensemble_predict(prior, set(freq_picks))
+            e_picks = ensemble_predict(pw, set(freq_picks), N, PICK)
             e_matches = len(set(e_picks) & actual_set)
-            existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="ensemble").first()
+            existing = session.query(Prediction).filter_by(game=game, draw_date=draw.draw_date, method="ensemble").first()
+            pred_data = {"game": game, "draw_date": draw.draw_date, "method": "ensemble", "matches": e_matches}
+            for j, n in enumerate(e_picks):
+                pred_data[f"n{j + 1}"] = n
             if existing:
-                existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = e_picks
-                existing.matches = e_matches
+                for k, v in pred_data.items():
+                    setattr(existing, k, v)
             else:
-                session.add(Prediction(
-                    draw_date=draw.draw_date, method="ensemble",
-                    n1=e_picks[0], n2=e_picks[1], n3=e_picks[2], n4=e_picks[3], n5=e_picks[4],
-                    matches=e_matches,
-                ))
+                session.add(Prediction(**pred_data))
             inserted["ensemble"] += 1
 
-            wf_picks = weighted_freq_predict(prior)
+            wf_picks = weighted_freq_predict(pw, N, PICK)
             wf_matches = len(set(wf_picks) & actual_set)
-            existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="weighted_freq").first()
+            existing = session.query(Prediction).filter_by(game=game, draw_date=draw.draw_date, method="weighted_freq").first()
+            pred_data = {"game": game, "draw_date": draw.draw_date, "method": "weighted_freq", "matches": wf_matches}
+            for j, n in enumerate(wf_picks):
+                pred_data[f"n{j + 1}"] = n
             if existing:
-                existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = wf_picks
-                existing.matches = wf_matches
+                for k, v in pred_data.items():
+                    setattr(existing, k, v)
             else:
-                session.add(Prediction(
-                    draw_date=draw.draw_date, method="weighted_freq",
-                    n1=wf_picks[0], n2=wf_picks[1], n3=wf_picks[2], n4=wf_picks[3], n5=wf_picks[4],
-                    matches=wf_matches,
-                ))
+                session.add(Prediction(**pred_data))
             inserted["weighted_freq"] += 1
 
-            hc_picks = hot_cold_predict(prior)
+            hc_picks = hot_cold_predict(pw, N, PICK)
             hc_matches = len(set(hc_picks) & actual_set)
-            existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="hot_cold").first()
+            existing = session.query(Prediction).filter_by(game=game, draw_date=draw.draw_date, method="hot_cold").first()
+            pred_data = {"game": game, "draw_date": draw.draw_date, "method": "hot_cold", "matches": hc_matches}
+            for j, n in enumerate(hc_picks):
+                pred_data[f"n{j + 1}"] = n
             if existing:
-                existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = hc_picks
-                existing.matches = hc_matches
+                for k, v in pred_data.items():
+                    setattr(existing, k, v)
             else:
-                session.add(Prediction(
-                    draw_date=draw.draw_date, method="hot_cold",
-                    n1=hc_picks[0], n2=hc_picks[1], n3=hc_picks[2], n4=hc_picks[3], n5=hc_picks[4],
-                    matches=hc_matches,
-                ))
+                session.add(Prediction(**pred_data))
             inserted["hot_cold"] += 1
 
         if lstm_params and idx >= SEQ_LEN:
-            prior = all_draws[idx - SEQ_LEN : idx]
-            seq_oh = np.zeros((SEQ_LEN, NUM_NUMBERS), dtype=np.float32)
-            for t, d in enumerate(prior):
-                for n in [d.n1, d.n2, d.n3, d.n4, d.n5]:
+            prior_lstm = all_draws[idx - SEQ_LEN : idx]
+            seq_oh = np.zeros((SEQ_LEN, N), dtype=np.float32)
+            for t, d in enumerate(prior_lstm):
+                for n in _get_nums(d, PICK):
                     seq_oh[t, n - 1] = 1.0
             probs = predict_with_model(lstm_params, seq_oh)
-            top_indices = np.argsort(probs)[-5:][::-1]
+            top_indices = np.argsort(probs)[-PICK:][::-1]
             lstm_picks = [int(i) + 1 for i in sorted(top_indices)]
             lstm_matches = len(set(lstm_picks) & actual_set)
-            existing = session.query(Prediction).filter_by(draw_date=draw.draw_date, method="lstm").first()
+            existing = session.query(Prediction).filter_by(game=game, draw_date=draw.draw_date, method="lstm").first()
+            pred_data = {"game": game, "draw_date": draw.draw_date, "method": "lstm", "matches": lstm_matches}
+            for j, n in enumerate(lstm_picks):
+                pred_data[f"n{j + 1}"] = n
             if existing:
-                existing.n1, existing.n2, existing.n3, existing.n4, existing.n5 = lstm_picks
-                existing.matches = lstm_matches
+                for k, v in pred_data.items():
+                    setattr(existing, k, v)
             else:
-                session.add(Prediction(
-                    draw_date=draw.draw_date, method="lstm",
-                    n1=lstm_picks[0], n2=lstm_picks[1], n3=lstm_picks[2], n4=lstm_picks[3], n5=lstm_picks[4],
-                    matches=lstm_matches,
-                ))
+                session.add(Prediction(**pred_data))
             inserted["lstm"] += 1
 
-        counter[draw.n1] += 1
-        counter[draw.n2] += 1
-        counter[draw.n3] += 1
-        counter[draw.n4] += 1
-        counter[draw.n5] += 1
-
-        if (i + 1) % 100 == 0:
+        if (i + 1) % 50 == 0:
             session.commit()
             print(f"Backtest progress: {i + 1}/{limit}")
 

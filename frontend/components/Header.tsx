@@ -17,11 +17,8 @@ export default function Header() {
       {open && (
         <div className="nav-dropdown" onClick={() => setOpen(false)}>
           <a href="/">Dashboard</a>
-          <a href="/frequency">Frequency</a>
-          <a href="/markov">Markov</a>
-          <a href="/ai">AI</a>
+          <span className="nav-section">Tools</span>
           <a href="/checker">Checker</a>
-          <a href="/tracker">Tracker</a>
         </div>
       )}
     </header>

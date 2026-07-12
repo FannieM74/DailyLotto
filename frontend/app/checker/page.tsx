@@ -1,9 +1,12 @@
 "use client";
 import { useState } from "react";
 import { checkTicket } from "@/lib/api";
+import { useGame } from "@/context/GameContext";
 import NumberBall from "@/components/NumberBall";
+import GameSelector from "@/components/GameSelector";
 
 export default function CheckerPage() {
+  const { game, setGame } = useGame();
   const [nums, setNums] = useState<number[]>([1, 2, 3, 4, 5]);
   const [results, setResults] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -23,17 +26,26 @@ export default function CheckerPage() {
     }
     setError("");
     setLoading(true);
-    const res = await checkTicket(nums[0], nums[1], nums[2], nums[3], nums[4]);
-    setLoading(false);
-    if (res.error) {
-      setError(res.error);
-      return;
+    try {
+      const res = await checkTicket(nums[0], nums[1], nums[2], nums[3], nums[4], game);
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      setResults(res);
+    } catch (e) {
+      setError("Network error checking ticket");
+    } finally {
+      setLoading(false);
     }
-    setResults(res);
   };
 
   return (
     <div>
+      <div className="filter-bar">
+        <GameSelector value={game} onChange={setGame} />
+      </div>
+
       <h1>Ticket Checker</h1>
       <p style={{ color: "var(--text2)", marginBottom: "1rem" }}>
         Enter your 5 numbers to check against historical draws

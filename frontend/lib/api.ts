@@ -17,58 +17,74 @@ async function apiFetch(path: string, options?: RequestInit) {
   }
 }
 
-export function getLatestDraw() {
-  return apiFetch("/draws/latest");
+export function getGames() {
+  return apiFetch("/games");
 }
 
-export function getRecentDraws(days = 7) {
-  return apiFetch(`/draws/recent?days=${days}`);
+export function getLatestDraw(game = "daily_lotto") {
+  return apiFetch(`/draws/latest?game=${game}`);
 }
 
-export function getFrequencyPrediction() {
-  return apiFetch("/predict/frequency");
+export function getRecentDraws(days = 7, game = "daily_lotto") {
+  return apiFetch(`/draws/recent?days=${days}&game=${game}`);
 }
 
-export function getMarkovPrediction() {
-  return apiFetch("/predict/markov");
+export function getFrequencyPrediction(game = "daily_lotto") {
+  return apiFetch(`/predict/frequency?game=${game}`);
 }
 
-export function getLstmPrediction() {
-  return apiFetch("/predict/lstm");
+export function getMarkovPrediction(game = "daily_lotto") {
+  return apiFetch(`/predict/markov?game=${game}`);
 }
 
-export function getPairFreqPrediction() {
-  return apiFetch("/predict/pair-freq");
+export function getLstmPrediction(game = "daily_lotto") {
+  return apiFetch(`/predict/lstm?game=${game}`);
 }
 
-export function getDeltaPrediction() {
-  return apiFetch("/predict/delta");
+export function getPairFreqPrediction(game = "daily_lotto") {
+  return apiFetch(`/predict/pair-freq?game=${game}`);
 }
 
-export function getEnsemblePrediction() {
-  return apiFetch("/predict/ensemble");
+export function getDeltaPrediction(game = "daily_lotto") {
+  return apiFetch(`/predict/delta?game=${game}`);
 }
 
-export function getWeightedFreqPrediction() {
-  return apiFetch("/predict/weighted-freq");
+export function getEnsemblePrediction(game = "daily_lotto") {
+  return apiFetch(`/predict/ensemble?game=${game}`);
 }
 
-export function getHotColdPrediction() {
-  return apiFetch("/predict/hot-cold");
+export function getWeightedFreqPrediction(game = "daily_lotto") {
+  return apiFetch(`/predict/weighted-freq?game=${game}`);
 }
 
-export function checkTicket(n1: number, n2: number, n3: number, n4: number, n5: number) {
+export function getHotColdPrediction(game = "daily_lotto") {
+  return apiFetch(`/predict/hot-cold?game=${game}`);
+}
+
+export function checkTicket(n1: number, n2: number, n3: number, n4: number, n5: number, game = "daily_lotto") {
   return apiFetch("/checker", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ n1, n2, n3, n4, n5 }),
+    body: JSON.stringify({ n1, n2, n3, n4, n5, game }),
   });
 }
 
-export function getTracker() {
-  return apiFetch("/tracker");
+export function getTracker(game = "daily_lotto") {
+  return apiFetch(`/tracker?game=${game}`);
 }
 
-export function getWinRates() {
-  return apiFetch("/tracker/win-rates");
+export function getWinRates(game = "daily_lotto") {
+  return apiFetch(`/tracker/win-rates?game=${game}`);
+}
+
+export function getTodayPredictions(game = "daily_lotto") {
+  return apiFetch(`/predict/today?game=${game}`);
+}
+
+export function getLatestResults(game = "daily_lotto") {
+  return apiFetch(`/results/latest?game=${game}`);
+}
+
+export function getRecentMatches(game = "daily_lotto") {
+  return apiFetch(`/tracker/recent-matches?game=${game}`);
 }

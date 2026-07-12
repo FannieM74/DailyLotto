@@ -1,0 +1,93 @@
+import { useGame } from "@/context/GameContext";
+import { METHOD_LABELS, METHOD_NAMES, METHOD_ORDER } from "@/app/page"; // Note: We might need to move these constants to a separate file
+
+// Since we cannot import from app/page (because it's a Next.js page and might cause issues), 
+// we'll define the constants here or move them to a shared lib.
+// For simplicity, we'll define them here, but ideally they should be in a shared place.
+
+const METHOD_LABELS: Record<string, string> = {
+  frequency: "F",
+  markov: "M",
+  lstm: "AI",
+  pair_freq: "PF",
+  delta: "D",
+  ensemble: "E",
+  weighted_freq: "W",
+  hot_cold: "HC",
+};
+
+const METHOD_NAMES: Record<string, string> = {
+  pair_freq: "Pair Freq",
+  delta: "Delta",
+  ensemble: "Ensemble",
+  weighted_freq: "Weighted",
+  hot_cold: "Hot/Cold",
+  lstm: "AI",
+  frequency: "Frequency",
+  markov: "Markov",
+};
+
+const METHOD_ORDER: string[] = [
+  "frequency",
+  "weighted_freq",
+  "pair_freq",
+  "delta",
+  "ensemble",
+  "hot_cold",
+  "markov",
+  "lstm",
+];
+
+interface TodaysPredictionsProps {
+  todaysPicks: Record<string, number[]>;
+  method: string;
+}
+
+export default function TodaysPredictions({ todaysPicks, method }: TodaysPredictionsProps) {
+  const { game } = useGame();
+
+  if (Object.keys(todaysPicks).length === 0) {
+    return null;
+  }
+
+  return (
+    <div style={{ marginBottom: "1.5rem" }}>
+      <h3 style={{ margin: "0 0 0.5rem" }}>Today's Predictions</h3>
+      {(Object.entries(todaysPicks) as [string, number[]][]).map(([methodKey, picks]) => (
+        <div key={methodKey} style={{
+          display: "flex", alignItems: "center", gap: "0.75rem",
+          marginBottom: "0.4rem", fontSize: "0.85rem"
+        }}>
+          <span style={{ textTransform: "capitalize", fontWeight: 600, minWidth: "5rem" }}>
+            {METHOD_NAMES[methodKey] || methodKey}
+          </span>
+          {picks.map((n, i) => (
+            <span key={i} className={`ball${method === "all" ? "" : " ball-small"}`} style={{
+              background: `linear-gradient(135deg, hsl(${n * 10} % 360, 70%, 50%), hsl(${(n * 10 + 40) % 360}, 70%, 55%))`,
+              width: method === "all" ? 24 : 20,
+              height: method === "all" ? 24 : 20,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "white",
+              fontSize: method === "all" ? 0.9 : 0.75rem,
+              fontWeight: 600,
+              marginRight: 4
+            }}>
+              {n}
+            </span>
+          ))}
+        </div>
+      ))}
+      {method === "all" && Object.keys(todaysPicks).length > 1 && (
+        <div className="consensus-row">
+          <span className="consensus-label">Consensus</span>
+          {/* We need to calculate consensus here, but for simplicity we'll skip in this component */}
+          {/* In the original code, consensus was calculated in the Dashboard. We'll leave it out for now and note that we need to move the consensus logic here or pass it as a prop. */}
+          {/* For now, we'll just show a placeholder. */}
+          <span>Consensus calculation would go here</span>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -121,7 +121,7 @@ export default function MethodSelector({ value, onChange }: { value: string; onC
             <MethodOption
               key={m.key}
               method={m}
-              isSelected=m.key === value
+              isSelected={m.key === value}
               recentMatches={recent}
               onSelect={handleSelect}
             />
