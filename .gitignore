@@ -13,3 +13,7 @@ venv/
 .playwright-mcp/
 docs/
 *.png
+*.backup
+*.bak
+*.yml
+.playwright-mcp/
